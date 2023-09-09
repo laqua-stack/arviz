@@ -690,7 +690,7 @@ class InferenceData(Mapping[str, xr.Dataset]):
             dataset = self[group]
             var_names = _var_names(var_names, dataset, filter_vars)
             if var_names is not None:
-                dataset = data[var_names]
+                dataset = dataset[var_names]
             df = None
             coords_to_idx = {
                 name: dict(map(reversed, enumerate(dataset.coords[name].values, index_origin)))
