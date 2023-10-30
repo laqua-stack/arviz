@@ -250,6 +250,9 @@ class PlotHandler:
             ]
         elif isinstance(colors, str):
             colors = [colors for _ in self.data]
+        elif isinstance(colors, Mapping):
+            self.var_colors = deepcopy(colors)
+            colors = [colors.get("default", "C0") for _ in self.data]
 
         self.colors = list(reversed(colors))  # y-values are upside down
         self.labeller = labeller
@@ -268,6 +271,7 @@ class PlotHandler:
                 combined=self.combined,
                 combine_dims=self.combine_dims,
                 colors=self.colors,
+                var_colors=self.var_colors,
                 labeller=self.labeller,
             )
             y = plotters[var_name].y_max()
@@ -618,7 +622,7 @@ class VarHandler:
     """Handle individual variable logic."""
 
     def __init__(
-        self, var_name, data, y_start, model_names, combined, combine_dims, colors, labeller
+        self, var_name, data, y_start, model_names, combined, combine_dims, colors, var_colors, labeller
     ):
         self.var_name = var_name
         self.data = data
@@ -627,6 +631,7 @@ class VarHandler:
         self.combined = combined
         self.combine_dims = combine_dims
         self.colors = colors
+        self.var_colors = var_colors
         self.labeller = labeller
         self.model_color = dict(zip(self.model_names, self.colors))
         max_chains = max(datum.chain.max().values for datum in data)
@@ -672,6 +677,22 @@ class VarHandler:
             for model_name, value_list in model_data.items():
                 row_label = self.labeller.make_model_label(model_name, label)
                 for values in value_list:
+                    if hasattr(self, "var_colors"):
+                        for var_regex, var_color in self.var_colors.items():
+                            # try regex
+                            match = re.match(var_regex, var_name)
+                            if match:
+                                color = var_color
+                                break
+                            else:
+                                color = self.model_color[
+                                    model_name
+                                ]
+
+                    else:
+                        color = self.model_color[
+                            model_name
+                        ]
                     yield y, row_label, model_name, label, selection_list[
                         idx
                     ], values, self.model_color[model_name]
