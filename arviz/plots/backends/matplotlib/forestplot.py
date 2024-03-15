@@ -1,5 +1,8 @@
 """Matplotlib forestplot."""
+import re
 from collections import OrderedDict, defaultdict
+from collections.abc import Mapping
+from copy import deepcopy
 from itertools import tee
 
 import matplotlib.pyplot as plt
@@ -24,35 +27,35 @@ def pairwise(iterable):
 
 
 def plot_forest(
-    ax,
-    datasets,
-    var_names,
-    model_names,
-    combined,
-    combine_dims,
-    colors,
-    figsize,
-    width_ratios,
-    linewidth,
-    markersize,
-    kind,
-    ncols,
-    hdi_prob,
-    quartiles,
-    rope,
-    ridgeplot_overlap,
-    ridgeplot_alpha,
-    ridgeplot_kind,
-    ridgeplot_truncate,
-    ridgeplot_quantiles,
-    textsize,
-    legend,
-    labeller,
-    ess,
-    r_hat,
-    backend_kwargs,
-    backend_config,  # pylint: disable=unused-argument
-    show,
+        ax,
+        datasets,
+        var_names,
+        model_names,
+        combined,
+        combine_dims,
+        colors,
+        figsize,
+        width_ratios,
+        linewidth,
+        markersize,
+        kind,
+        ncols,
+        hdi_prob,
+        quartiles,
+        rope,
+        ridgeplot_overlap,
+        ridgeplot_alpha,
+        ridgeplot_kind,
+        ridgeplot_truncate,
+        ridgeplot_quantiles,
+        textsize,
+        legend,
+        labeller,
+        ess,
+        r_hat,
+        backend_kwargs,
+        backend_config,  # pylint: disable=unused-argument
+        show,
 ):
     """Matplotlib forest plot."""
     plot_handler = PlotHandler(
@@ -209,6 +212,9 @@ class PlotHandler:
             colors = [f"C{idx}" for idx, _ in enumerate(self.data)]
         elif isinstance(colors, str):
             colors = [colors for _ in self.data]
+        elif isinstance(colors, Mapping):
+            self.var_colors = deepcopy(colors)
+            colors = [colors.get("default", "C0") for _ in self.data]
 
         self.colors = list(reversed(colors))  # y-values are upside down
         self.labeller = labeller
@@ -227,6 +233,7 @@ class PlotHandler:
                 combined=self.combined,
                 combine_dims=self.combine_dims,
                 colors=self.colors,
+                var_colors=self.var_colors,
                 labeller=self.labeller,
             )
             y = plotters[var_name].y_max()
@@ -278,16 +285,16 @@ class PlotHandler:
                 return ax
 
     def ridgeplot(
-        self,
-        hdi_prob,
-        mult,
-        linewidth,
-        markersize,
-        alpha,
-        ridgeplot_kind,
-        ridgeplot_truncate,
-        ridgeplot_quantiles,
-        ax,
+            self,
+            hdi_prob,
+            mult,
+            linewidth,
+            markersize,
+            alpha,
+            ridgeplot_kind,
+            ridgeplot_truncate,
+            ridgeplot_quantiles,
+            ax,
     ):
         """Draw ridgeplot for each plotter.
 
@@ -319,7 +326,7 @@ class PlotHandler:
         zorder = 0
         for plotter in self.plotters.values():
             for x, y_min, y_max, hdi_, y_q, color in plotter.ridgeplot(
-                hdi_prob, mult, ridgeplot_kind
+                    hdi_prob, mult, ridgeplot_kind
             ):
                 if alpha == 0:
                     border = color
@@ -380,7 +387,7 @@ class PlotHandler:
         return ax
 
     def forestplot(
-        self, hdi_prob, quartiles, xt_labelsize, titlesize, linewidth, markersize, ax, rope
+            self, hdi_prob, quartiles, xt_labelsize, titlesize, linewidth, markersize, ax, rope
     ):
         """Draw forestplot for each plotter.
 
@@ -498,10 +505,10 @@ class PlotHandler:
         """Figure out the height of this plot."""
         # hand-tuned
         return (
-            4
-            + len(self.data) * len(self.var_names)
-            - 1
-            + 0.1 * sum(1 for j in self.plotters.values() for _ in j.iterator())
+                4
+                + len(self.data) * len(self.var_names)
+                - 1
+                + 0.1 * sum(1 for j in self.plotters.values() for _ in j.iterator())
         )
 
     def y_max(self):
@@ -514,7 +521,7 @@ class VarHandler:
     """Handle individual variable logic."""
 
     def __init__(
-        self, var_name, data, y_start, model_names, combined, combine_dims, colors, labeller
+            self, var_name, data, y_start, model_names, combined, combine_dims, colors, var_colors, labeller
     ):
         self.var_name = var_name
         self.data = data
@@ -523,6 +530,7 @@ class VarHandler:
         self.combined = combined
         self.combine_dims = combine_dims
         self.colors = colors
+        self.var_colors = var_colors
         self.labeller = labeller
         self.model_color = dict(zip(self.model_names, self.colors))
         max_chains = max(datum.chain.max().values for datum in data)
@@ -568,9 +576,23 @@ class VarHandler:
             for model_name, value_list in model_data.items():
                 row_label = self.labeller.make_model_label(model_name, label)
                 for values in value_list:
-                    yield y, row_label, label, selection_list[idx], values, self.model_color[
-                        model_name
-                    ]
+                    if hasattr(self, "var_colors"):
+                        for var_regex, var_color in self.var_colors.items():
+                            # try regex
+                            match = re.match(var_regex, var_name)
+                            if match:
+                                color = var_color
+                                break
+                            else:
+                                color = self.model_color[
+                                    model_name
+                                ]
+
+                    else:
+                        color = self.model_color[
+                            model_name
+                        ]
+                    yield y, row_label, label, selection_list[idx], values, color
                     y += self.chain_offset
                 y += self.var_offset
             y += self.group_offset
